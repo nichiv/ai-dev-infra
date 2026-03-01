@@ -9,6 +9,19 @@
 #   tracker_get_issue "$ISSUE_NUMBER" "$REPO"
 
 _TRACKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_REPO_ROOT="$(cd "$_TRACKER_DIR/../.." && pwd)"
+
+# Load .env from project root if it exists (does not override existing env vars)
+if [ -f "$_REPO_ROOT/.env" ]; then
+  while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" == \#* ]] && continue
+    value="${value%\"}" && value="${value#\"}"
+    value="${value%\'}" && value="${value#\'}"
+    if [ -z "${!key:-}" ]; then
+      export "$key=$value"
+    fi
+  done < "$_REPO_ROOT/.env"
+fi
 
 # Resolve provider from config (default: github)
 _ISSUE_TRACKER=$(config_get '.issue_tracker' 2>/dev/null) || _ISSUE_TRACKER="github"

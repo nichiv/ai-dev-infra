@@ -200,6 +200,13 @@ youtrack:
 export YOUTRACK_TOKEN="perm:xxx..."
 ```
 
+プロジェクトルートの `.env` ファイルからも読み込み可能（既存の環境変数を上書きしない）。
+
+```
+# .env
+YOUTRACK_TOKEN=perm:xxx...
+```
+
 ### プロバイダーの追加
 
 全プロバイダーは以下の3関数を実装する:
