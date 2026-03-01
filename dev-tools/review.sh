@@ -360,6 +360,8 @@ ${RESULTS[$i]}
   # --- 判定 ---
   RESULT=$(cat "$REVIEW_DIR/combined-review.md")
 
+  _ALLOW_LOW=$(config_get '.review.allow_low' 2>/dev/null) || _ALLOW_LOW="false"
+
   # Critical [C1] / High [H1] / Medium [M1] の指摘IDがあれば失敗
   if echo "$RESULT" | grep -qE '\[C[0-9]+\]|\[H[0-9]+\]|\[M[0-9]+\]'; then
     echo ""
@@ -375,9 +377,24 @@ ${RESULTS[$i]}
     exit 1
   fi
 
+  # allow_low=false の場合、Low [L1] の指摘もブロック
+  if [ "$_ALLOW_LOW" != "true" ] && echo "$RESULT" | grep -qE '\[L[0-9]+\]'; then
+    echo ""
+    echo "========================================" >&2
+    echo "❌ review FAILED: Low 指摘があります（allow_low: false）" >&2
+    echo "========================================" >&2
+    echo "" >&2
+    echo "レビュー結果:" >&2
+    cat "$REVIEW_DIR/combined-review.md" >&2
+    echo "" >&2
+    echo "ファイル: $REVIEW_DIR/combined-review.md" >&2
+    echo "========================================" >&2
+    exit 1
+  fi
+
   echo ""
   echo "========================================" >&2
-  echo "✅ review 完了: Critical/High/Medium 指摘なし" >&2
+  echo "✅ review 完了: ブロック対象の指摘なし" >&2
   echo "========================================" >&2
   echo "" >&2
   echo "レビュー結果:" >&2
@@ -572,17 +589,21 @@ ${RESULTS[$i]}
 
   _ALLOW_LOW=$(config_get '.review.allow_low' 2>/dev/null) || _ALLOW_LOW="false"
 
+  # 新規指摘の深刻度チェック: 🔴 Critical / 🟠 High / 🟡 Medium は常にブロック
+  _has_blocking_new_findings=false
+  if echo "$RESULT" | grep -qE '🔴|🟠|🟡'; then
+    _has_blocking_new_findings=true
+  fi
+  # allow_low=false なら 🟢 Low もブロック
+  if [ "$_ALLOW_LOW" != "true" ] && echo "$RESULT" | grep -qE '🟢'; then
+    _has_blocking_new_findings=true
+  fi
+
   if echo "$RESULT" | grep -qi "LGTM"; then
-    if ! echo "$RESULT" | grep -qE '❌|⚠️'; then
+    # 前回指摘に ❌/⚠️ がなく、かつブロック対象の新規指摘もなければ通過
+    if ! echo "$RESULT" | grep -qE '❌|⚠️' && [ "$_has_blocking_new_findings" = false ]; then
       echo "✅ LGTM — 全指摘対応済み"
       exit 0
-    fi
-    if [ "$_ALLOW_LOW" = "true" ]; then
-      # C/H/M/N 行に ❌/⚠️ がなければ Low のみとみなして通過
-      if ! echo "$RESULT" | grep -E '^\| (C|H|M|N)[0-9]+ \|' | grep -qE '❌|⚠️'; then
-        echo "✅ LGTM — Low 指摘は許容（allow_low: true）"
-        exit 0
-      fi
     fi
   fi
 
