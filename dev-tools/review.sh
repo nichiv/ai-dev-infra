@@ -32,7 +32,11 @@ fi
 
 SUBCOMMAND="$1"
 ISSUE_NUMBER="$2"
-WITH_CODEX=false
+
+# Codex 実行: CLI フラグ > 設定ファイル > デフォルト(false)
+_CONFIG_WITH_CODEX=$(config_get '.review.with_codex' 2>/dev/null) || _CONFIG_WITH_CODEX="false"
+WITH_CODEX="$_CONFIG_WITH_CODEX"
+unset _CONFIG_WITH_CODEX
 
 if [ "${3:-}" = "--with-codex" ]; then
   WITH_CODEX=true
