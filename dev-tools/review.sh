@@ -2,8 +2,10 @@
 # review.sh - Claude CLI + Gemini CLI + Codex CLI による並列コードレビュー
 #
 # Usage:
-#   ./dev-tools/review.sh review <issue_number>      # 初回レビュー
-#   ./dev-tools/review.sh re-review <issue_number>   # 再レビュー
+#   ./dev-tools/review.sh review <issue_number>              # 初回レビュー（Claude + Gemini）
+#   ./dev-tools/review.sh review <issue_number> --with-codex # Codex も含めて実行
+#   ./dev-tools/review.sh re-review <issue_number>           # 再レビュー
+#   ./dev-tools/review.sh re-review <issue_number> --with-codex
 #
 # 終了コード (re-review):
 #   0 = LGTM（全指摘対応済み、新規指摘なし）
@@ -23,17 +25,34 @@ source "${SCRIPT_DIR}/config.sh"
 source "${SCRIPT_DIR}/issue-tracker/loader.sh"
 
 # --- 引数チェック ---
-if [ $# -ne 2 ]; then
-  echo "Usage: $0 <review|re-review> <issue_number>"
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+  echo "Usage: $0 <review|re-review> <issue_number> [--with-codex]"
   exit 1
 fi
 
 SUBCOMMAND="$1"
 ISSUE_NUMBER="$2"
 
+# レビュー有効/無効: 設定ファイル > デフォルト(true)
+_REVIEW_ENABLED=$(config_get '.review.enabled' 2>/dev/null) || _REVIEW_ENABLED="true"
+if [ "$_REVIEW_ENABLED" != "true" ]; then
+  echo "⏭️ AIレビューは無効です（review.enabled: false）"
+  exit 0
+fi
+unset _REVIEW_ENABLED
+
+# Codex 実行: CLI フラグ > 設定ファイル > デフォルト(false)
+_CONFIG_WITH_CODEX=$(config_get '.review.with_codex' 2>/dev/null) || _CONFIG_WITH_CODEX="false"
+WITH_CODEX="$_CONFIG_WITH_CODEX"
+unset _CONFIG_WITH_CODEX
+
+if [ "${3:-}" = "--with-codex" ]; then
+  WITH_CODEX=true
+fi
+
 if [ "$SUBCOMMAND" != "review" ] && [ "$SUBCOMMAND" != "re-review" ]; then
   echo "Unknown subcommand: $SUBCOMMAND"
-  echo "Usage: $0 <review|re-review> <issue_number>"
+  echo "Usage: $0 <review|re-review> <issue_number> [--with-codex]"
   exit 1
 fi
 
@@ -105,6 +124,18 @@ fi
 
 ISSUE_BODY=$(tracker_get_issue "$ISSUE_NUMBER" "$REPO")
 
+# --- タイムアウト付きコマンド実行 ---
+# macOS には timeout コマンドがないため perl で代替
+if [ "$WITH_CODEX" = true ]; then
+  AGENT_TIMEOUT="${AGENT_TIMEOUT:-900}"   # Codex 込み: 15分
+else
+  AGENT_TIMEOUT="${AGENT_TIMEOUT:-600}"   # デフォルト: 10分
+fi
+
+_run_with_timeout() {
+  perl -e 'alarm shift @ARGV; exec @ARGV' "$AGENT_TIMEOUT" "$@"
+}
+
 # --- エージェント実行ヘルパー ---
 # run_agent <name> <primary_model> <fallback_model> <prompt> <output_file>
 run_agent() {
@@ -114,31 +145,32 @@ run_agent() {
   case "$name" in
     claude)
       # pre-push hook から呼ばれた場合、CLAUDECODE が継承されてネスト禁止になるため unset
-      if CLAUDECODE= claude --print --model "$primary" "$prompt" > "$output" 2>"$errlog"; then
+      if CLAUDECODE= _run_with_timeout claude --print --model "$primary" "$prompt" > "$output" 2>"$errlog"; then
         return 0
       fi
       echo "⚠️ Claude (${primary}) 失敗。fallback (${fallback}) でリトライ..."
-      if CLAUDECODE= claude --print --model "$fallback" "$prompt" > "$output" 2>"$errlog"; then
+      if CLAUDECODE= _run_with_timeout claude --print --model "$fallback" "$prompt" > "$output" 2>"$errlog"; then
         return 0
       fi
       return 1
       ;;
     gemini)
-      if gemini -m "$primary" -p "$prompt" > "$output" 2>"$errlog"; then
+      if _run_with_timeout gemini -m "$primary" -p "$prompt" > "$output" 2>"$errlog"; then
         return 0
       fi
       echo "⚠️ Gemini (${primary}) 失敗。fallback (${fallback}) でリトライ..."
-      if gemini -m "$fallback" -p "$prompt" > "$output" 2>"$errlog"; then
+      if _run_with_timeout gemini -m "$fallback" -p "$prompt" > "$output" 2>"$errlog"; then
         return 0
       fi
       return 1
       ;;
     codex)
-      if codex exec -m "$primary" "$prompt" > "$output" 2>"$errlog"; then
+      local progress="${output%.md}_progress.jsonl"
+      if _run_with_timeout codex exec -m "$primary" --json -o "$output" "$prompt" > "$progress" 2>&1; then
         return 0
       fi
       echo "⚠️ Codex (${primary}) 失敗。fallback (${fallback}) でリトライ..."
-      if codex exec -m "$fallback" "$prompt" > "$output" 2>"$errlog"; then
+      if _run_with_timeout codex exec -m "$fallback" --json -o "$output" "$prompt" > "$progress" 2>&1; then
         return 0
       fi
       return 1
@@ -211,8 +243,12 @@ do_review() {
 '"$DIFF_NAMES"'
 '
 
-  # --- 3エージェントを並列実行 ---
-  echo "🔍 Claude + Gemini + Codex でレビュー中..."
+  # --- エージェントを並列実行 ---
+  if [ "$WITH_CODEX" = true ]; then
+    echo "🔍 Claude + Gemini + Codex でレビュー中...（タイムアウト: ${AGENT_TIMEOUT}秒）"
+  else
+    echo "🔍 Claude + Gemini でレビュー中...（タイムアウト: ${AGENT_TIMEOUT}秒）"
+  fi
 
   run_agent claude "$CLAUDE_PRIMARY" "$CLAUDE_FALLBACK" "$REVIEW_PROMPT" "$REVIEW_DIR/claude-review.md" &
   CLAUDE_PID=$!
@@ -220,13 +256,18 @@ do_review() {
   run_agent gemini "$GEMINI_PRIMARY" "$GEMINI_FALLBACK" "$REVIEW_PROMPT" "$REVIEW_DIR/gemini-review.md" &
   GEMINI_PID=$!
 
-  run_agent codex "$CODEX_PRIMARY" "$CODEX_FALLBACK" "$REVIEW_PROMPT" "$REVIEW_DIR/codex-review.md" &
-  CODEX_PID=$!
+  CODEX_PID=""
+  if [ "$WITH_CODEX" = true ]; then
+    run_agent codex "$CODEX_PRIMARY" "$CODEX_FALLBACK" "$REVIEW_PROMPT" "$REVIEW_DIR/codex-review.md" &
+    CODEX_PID=$!
+  fi
 
   CLAUDE_EXIT=0; GEMINI_EXIT=0; CODEX_EXIT=0
   wait $CLAUDE_PID || CLAUDE_EXIT=$?
   wait $GEMINI_PID || GEMINI_EXIT=$?
-  wait $CODEX_PID || CODEX_EXIT=$?
+  if [ -n "$CODEX_PID" ]; then
+    wait $CODEX_PID || CODEX_EXIT=$?
+  fi
 
   # 成功したエージェントの結果を収集
   RESULTS=()
@@ -243,11 +284,13 @@ do_review() {
   else
     echo "⚠️ Gemini CLI が失敗しました。"
   fi
-  if [ $CODEX_EXIT -eq 0 ] && [ -s "$REVIEW_DIR/codex-review.md" ]; then
-    RESULTS+=("$(cat "$REVIEW_DIR/codex-review.md")")
-    RESULT_LABELS+=("Codex")
-  else
-    echo "⚠️ Codex CLI が失敗しました。"
+  if [ "$WITH_CODEX" = true ]; then
+    if [ $CODEX_EXIT -eq 0 ] && [ -s "$REVIEW_DIR/codex-review.md" ]; then
+      RESULTS+=("$(cat "$REVIEW_DIR/codex-review.md")")
+      RESULT_LABELS+=("Codex")
+    else
+      echo "⚠️ Codex CLI が失敗しました。"
+    fi
   fi
 
   if [ ${#RESULTS[@]} -eq 0 ]; then
@@ -385,8 +428,12 @@ LGTM / 要修正
 '"$DIFF_NAMES"'
 '
 
-  # --- 3エージェントを並列実行 ---
-  echo "🔍 Claude + Gemini + Codex で再レビュー中..."
+  # --- エージェントを並列実行 ---
+  if [ "$WITH_CODEX" = true ]; then
+    echo "🔍 Claude + Gemini + Codex で再レビュー中...（タイムアウト: ${AGENT_TIMEOUT}秒）"
+  else
+    echo "🔍 Claude + Gemini で再レビュー中...（タイムアウト: ${AGENT_TIMEOUT}秒）"
+  fi
 
   run_agent claude "$CLAUDE_PRIMARY" "$CLAUDE_FALLBACK" "$RE_REVIEW_PROMPT" "$REVIEW_DIR/claude-re-review.md" &
   CLAUDE_PID=$!
@@ -394,13 +441,18 @@ LGTM / 要修正
   run_agent gemini "$GEMINI_PRIMARY" "$GEMINI_FALLBACK" "$RE_REVIEW_PROMPT" "$REVIEW_DIR/gemini-re-review.md" &
   GEMINI_PID=$!
 
-  run_agent codex "$CODEX_PRIMARY" "$CODEX_FALLBACK" "$RE_REVIEW_PROMPT" "$REVIEW_DIR/codex-re-review.md" &
-  CODEX_PID=$!
+  CODEX_PID=""
+  if [ "$WITH_CODEX" = true ]; then
+    run_agent codex "$CODEX_PRIMARY" "$CODEX_FALLBACK" "$RE_REVIEW_PROMPT" "$REVIEW_DIR/codex-re-review.md" &
+    CODEX_PID=$!
+  fi
 
   CLAUDE_EXIT=0; GEMINI_EXIT=0; CODEX_EXIT=0
   wait $CLAUDE_PID || CLAUDE_EXIT=$?
   wait $GEMINI_PID || GEMINI_EXIT=$?
-  wait $CODEX_PID || CODEX_EXIT=$?
+  if [ -n "$CODEX_PID" ]; then
+    wait $CODEX_PID || CODEX_EXIT=$?
+  fi
 
   # 成功したエージェントの結果を収集
   RESULTS=()
@@ -417,11 +469,13 @@ LGTM / 要修正
   else
     echo "⚠️ Gemini CLI が失敗しました。"
   fi
-  if [ $CODEX_EXIT -eq 0 ] && [ -s "$REVIEW_DIR/codex-re-review.md" ]; then
-    RESULTS+=("$(cat "$REVIEW_DIR/codex-re-review.md")")
-    RESULT_LABELS+=("Codex")
-  else
-    echo "⚠️ Codex CLI が失敗しました。"
+  if [ "$WITH_CODEX" = true ]; then
+    if [ $CODEX_EXIT -eq 0 ] && [ -s "$REVIEW_DIR/codex-re-review.md" ]; then
+      RESULTS+=("$(cat "$REVIEW_DIR/codex-re-review.md")")
+      RESULT_LABELS+=("Codex")
+    else
+      echo "⚠️ Codex CLI が失敗しました。"
+    fi
   fi
 
   if [ ${#RESULTS[@]} -eq 0 ]; then
