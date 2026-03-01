@@ -129,7 +129,7 @@ ISSUE_BODY=$(tracker_get_issue "$ISSUE_NUMBER" "$REPO")
 if [ "$WITH_CODEX" = true ]; then
   AGENT_TIMEOUT="${AGENT_TIMEOUT:-900}"   # Codex 込み: 15分
 else
-  AGENT_TIMEOUT="${AGENT_TIMEOUT:-300}"   # デフォルト: 5分
+  AGENT_TIMEOUT="${AGENT_TIMEOUT:-600}"   # デフォルト: 10分
 fi
 
 _run_with_timeout() {
