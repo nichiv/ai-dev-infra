@@ -33,6 +33,14 @@ fi
 SUBCOMMAND="$1"
 ISSUE_NUMBER="$2"
 
+# レビュー有効/無効: 設定ファイル > デフォルト(true)
+_REVIEW_ENABLED=$(config_get '.review.enabled' 2>/dev/null) || _REVIEW_ENABLED="true"
+if [ "$_REVIEW_ENABLED" != "true" ]; then
+  echo "⏭️ AIレビューは無効です（review.enabled: false）"
+  exit 0
+fi
+unset _REVIEW_ENABLED
+
 # Codex 実行: CLI フラグ > 設定ファイル > デフォルト(false)
 _CONFIG_WITH_CODEX=$(config_get '.review.with_codex' 2>/dev/null) || _CONFIG_WITH_CODEX="false"
 WITH_CODEX="$_CONFIG_WITH_CODEX"

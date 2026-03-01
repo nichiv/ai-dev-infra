@@ -1,6 +1,7 @@
 issue_tracker: github
 
 review:
+  enabled: true
   # Codex を含めてレビュー実行する場合は true（CLI の --with-codex でも有効化可能）
   with_codex: false
 
