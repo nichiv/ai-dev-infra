@@ -1,6 +1,8 @@
 # 自動レビュー
 
-`git push` をトリガーに、Claude・Gemini・Codex の3エージェントが並列でコードレビューを実行し、結果を GitHub Issue にコメントする。
+`git push` をトリガーに、複数の AI エージェントが並列でコードレビューを実行し、結果を Issue にコメントする。
+
+デフォルトは Claude + Gemini の2エージェント。Codex はオプションで追加可能。
 
 ## 仕組み
 
@@ -19,7 +21,7 @@ review.sh re-review 123
   │
   ├──→ Claude (primary/fallback)  ─┐
   ├──→ Gemini (primary/fallback)  ─┤ 並列実行
-  └──→ Codex  (primary/fallback)  ─┘
+  └──→ Codex  (primary/fallback)  ─┘ ← --with-codex 時のみ
                                     │
                                     ▼
                               結果を統合
@@ -34,10 +36,11 @@ review.sh re-review 123
 
 ### ポイント
 
-- 3エージェントが独立してレビューし、結果を Claude が1つに統合する
+- デフォルトは Claude + Gemini の2エージェント。Codex はオプション
 - 各エージェントは primary モデル → fallback モデルの順で試行する
 - 1エージェントでも成功すればレビュー結果を出力する（全失敗時のみエラー）
 - re-review は前回指摘の対応状況を追跡し、全指摘対応済みなら LGTM で push を通す
+- タイムアウト: デフォルト5分、Codex 込みの場合15分（`AGENT_TIMEOUT` 環境変数で上書き可能）
 
 ## セットアップ
 
@@ -139,7 +142,11 @@ tmp/
 PR 作成前に手動で実行する。
 
 ```bash
+# Claude + Gemini でレビュー（デフォルト）
 ./dev-tools/review.sh review 123
+
+# Codex も含めてレビュー
+./dev-tools/review.sh review 123 --with-codex
 ```
 
 - `base_branch...HEAD` の差分を取得
@@ -158,20 +165,47 @@ git push  # → lefthook → review.sh re-review 123
 - 全指摘対応済み＋新規指摘なし → LGTM（exit 0、push 成功）
 - 未対応あり or 新規指摘あり → 要修正（exit 1、push ブロック）
 
+### Codex の有効化
+
+Codex はデフォルトでは実行されない。有効化する方法は2つ:
+
+**方法1: CLI フラグ（一回限り）**
+
+```bash
+./dev-tools/review.sh review 123 --with-codex
+```
+
+**方法2: 設定ファイル（永続的）**
+
+`.config/project.yml` に以下を追加:
+
+```yaml
+review:
+  with_codex: true
+```
+
+CLI フラグが設定ファイルより優先される。
+
+Codex を有効にするとタイムアウトが5分→15分に延長される。Codex は思考が深く、大きな差分では10分以上かかることがある。
+
 ### 出力ファイル
 
 ```
 tmp/review/
-├── claude-review.md          # Claude の個別結果
-├── gemini-review.md          # Gemini の個別結果
-├── codex-review.md           # Codex の個別結果
-├── combined-review.md        # 統合結果（review）
-├── claude-re-review.md       # Claude の再レビュー結果
-├── gemini-re-review.md       # Gemini の再レビュー結果
-├── codex-re-review.md        # Codex の再レビュー結果
-├── re-review-result.md       # 統合結果（re-review）
-└── *.err                     # 各エージェントのエラーログ
+├── claude-review.md              # Claude の個別結果
+├── gemini-review.md              # Gemini の個別結果
+├── codex-review.md               # Codex の個別結果（--with-codex 時のみ）
+├── codex-review_progress.jsonl   # Codex の実行トレース（JSONL）
+├── combined-review.md            # 統合結果（review）
+├── claude-re-review.md           # Claude の再レビュー結果
+├── gemini-re-review.md           # Gemini の再レビュー結果
+├── codex-re-review.md            # Codex の再レビュー結果
+├── codex-re-review_progress.jsonl # Codex の実行トレース（JSONL）
+├── re-review-result.md           # 統合結果（re-review）
+└── *.err                         # 各エージェントのエラーログ
 ```
+
+Codex の `_progress.jsonl` には WebSocket 接続状況、思考過程、コマンド実行、トークン使用量などが記録される。実行が遅い場合の診断に使用する。
 
 ## Issue Tracker 設定
 
