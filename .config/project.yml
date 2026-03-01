@@ -1,3 +1,5 @@
+issue_tracker: github
+
 repository:
   owner: your-org
   name: your-repo
