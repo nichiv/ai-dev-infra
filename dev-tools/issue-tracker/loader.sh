@@ -36,7 +36,7 @@ case "$_ISSUE_TRACKER" in
   *)
     echo "ERROR: Unknown issue_tracker provider: $_ISSUE_TRACKER" >&2
     echo "Supported: github, youtrack" >&2
-    exit 1
+    return 1
     ;;
 esac
 
@@ -44,7 +44,7 @@ esac
 for _fn in tracker_get_issue tracker_get_comments tracker_post_comment; do
   if ! declare -f "$_fn" > /dev/null 2>&1; then
     echo "ERROR: Provider '$_ISSUE_TRACKER' does not implement $_fn()" >&2
-    exit 1
+    return 1
   fi
 done
 
