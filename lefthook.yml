@@ -12,6 +12,7 @@ pre-push:
   commands:
     review:
       run: |
+        export CONFIG_DIR="$(pwd)/.config"
         BRANCH=$(git rev-parse --abbrev-ref HEAD)
         # ブランチ名から issue 番号を抽出（例: feature-123 → 123）
         BRANCH_PATTERN='^feature-([0-9]+)$'
