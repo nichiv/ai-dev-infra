@@ -294,7 +294,7 @@ do_review() {
   fi
 
   if [ ${#RESULTS[@]} -eq 0 ]; then
-    echo "❌ 全エージェントが失敗しました。"
+    echo "❌ review FAILED: 全エージェントが失敗しました。エラーログ: $REVIEW_DIR/*.err" >&2
     exit 1
   fi
 
@@ -357,7 +357,34 @@ ${RESULTS[$i]}
   echo "💬 Issue #$ISSUE_NUMBER にコメント中..."
   tracker_post_comment "$ISSUE_NUMBER" "$REPO" "$REVIEW_DIR/combined-review.md"
 
-  echo "✅ レビュー完了: $REVIEW_DIR/combined-review.md"
+  # --- 判定 ---
+  RESULT=$(cat "$REVIEW_DIR/combined-review.md")
+
+  # Critical [C1] / High [H1] / Medium [M1] の指摘IDがあれば失敗
+  if echo "$RESULT" | grep -qE '\[C[0-9]+\]|\[H[0-9]+\]|\[M[0-9]+\]'; then
+    echo ""
+    echo "========================================" >&2
+    echo "❌ review FAILED: Critical/High/Medium 指摘があります" >&2
+    echo "========================================" >&2
+    echo "" >&2
+    echo "レビュー結果:" >&2
+    cat "$REVIEW_DIR/combined-review.md" >&2
+    echo "" >&2
+    echo "ファイル: $REVIEW_DIR/combined-review.md" >&2
+    echo "========================================" >&2
+    exit 1
+  fi
+
+  echo ""
+  echo "========================================" >&2
+  echo "✅ review 完了: Critical/High/Medium 指摘なし" >&2
+  echo "========================================" >&2
+  echo "" >&2
+  echo "レビュー結果:" >&2
+  cat "$REVIEW_DIR/combined-review.md" >&2
+  echo "" >&2
+  echo "ファイル: $REVIEW_DIR/combined-review.md" >&2
+  echo "========================================" >&2
 }
 
 # ==========================================
@@ -479,7 +506,7 @@ LGTM / 要修正
   fi
 
   if [ ${#RESULTS[@]} -eq 0 ]; then
-    echo "❌ 全エージェントが失敗しました。"
+    echo "❌ re-review FAILED: 全エージェントが失敗しました。エラーログ: $REVIEW_DIR/*.err" >&2
     exit 1
   fi
 
@@ -543,14 +570,32 @@ ${RESULTS[$i]}
   # --- LGTM 判定 ---
   RESULT=$(cat "$REVIEW_DIR/re-review-result.md")
 
+  _ALLOW_LOW=$(config_get '.review.allow_low' 2>/dev/null) || _ALLOW_LOW="false"
+
   if echo "$RESULT" | grep -qi "LGTM"; then
     if ! echo "$RESULT" | grep -qE '❌|⚠️'; then
       echo "✅ LGTM — 全指摘対応済み"
       exit 0
     fi
+    if [ "$_ALLOW_LOW" = "true" ]; then
+      # C/H/M/N 行に ❌/⚠️ がなければ Low のみとみなして通過
+      if ! echo "$RESULT" | grep -E '^\| (C|H|M|N)[0-9]+ \|' | grep -qE '❌|⚠️'; then
+        echo "✅ LGTM — Low 指摘は許容（allow_low: true）"
+        exit 0
+      fi
+    fi
   fi
 
-  echo "⚠️ 追加対応が必要です。詳細: $REVIEW_DIR/re-review-result.md"
+  echo ""
+  echo "========================================" >&2
+  echo "❌ re-review FAILED: 追加対応が必要です" >&2
+  echo "========================================" >&2
+  echo "" >&2
+  echo "レビュー結果:" >&2
+  cat "$REVIEW_DIR/re-review-result.md" >&2
+  echo "" >&2
+  echo "ファイル: $REVIEW_DIR/re-review-result.md" >&2
+  echo "========================================" >&2
   exit 1
 }
 
