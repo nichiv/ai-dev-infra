@@ -1,0 +1,11 @@
+claude:
+  primary: opus
+  fallback: sonnet
+
+gemini:
+  primary: gemini-3.1-pro-preview
+  fallback: gemini-3-flash-preview
+
+codex:
+  primary: gpt-5.3-codex
+  fallback: gpt-5.2

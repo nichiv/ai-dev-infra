@@ -1,0 +1,7 @@
+repository:
+  owner: your-org
+  name: your-repo
+  full_name: your-org/your-repo
+  base_branch: main
+  # ブランチのプレフィックス（例: "feature" → feature-123 から issue 番号を抽出）
+  branch_prefix: feature

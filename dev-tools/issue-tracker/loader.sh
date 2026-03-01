@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# loader.sh - Issue tracker provider loader
+#
+# Reads issue_tracker from .config/project.yml, sources the matching provider,
+# and validates that required functions are defined.
+#
+# Usage:
+#   source "${SCRIPT_DIR}/issue-tracker/loader.sh"
+#   tracker_get_issue "$ISSUE_NUMBER" "$REPO"
+
+_TRACKER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Resolve provider from config (default: github)
+_ISSUE_TRACKER=$(config_get '.issue_tracker' 2>/dev/null) || _ISSUE_TRACKER="github"
+
+case "$_ISSUE_TRACKER" in
+  github)
+    source "${_TRACKER_DIR}/github.sh"
+    ;;
+  youtrack)
+    source "${_TRACKER_DIR}/youtrack.sh"
+    ;;
+  *)
+    echo "ERROR: Unknown issue_tracker provider: $_ISSUE_TRACKER" >&2
+    echo "Supported: github, youtrack" >&2
+    exit 1
+    ;;
+esac
+
+# Validate that required functions are defined
+for _fn in tracker_get_issue tracker_get_comments tracker_post_comment; do
+  if ! declare -f "$_fn" > /dev/null 2>&1; then
+    echo "ERROR: Provider '$_ISSUE_TRACKER' does not implement $_fn()" >&2
+    exit 1
+  fi
+done
+
+unset _TRACKER_DIR _ISSUE_TRACKER _fn

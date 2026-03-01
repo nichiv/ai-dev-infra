@@ -1,0 +1,21 @@
+# lefthook.yml - AI自動レビューの pre-push フック設定
+#
+# セットアップ:
+#   1. lefthook をインストール: brew install lefthook
+#   2. lefthook install を実行
+#   3. .config/project.yml と .config/ai-models.yml を設定
+#
+# BRANCH_PATTERN はプロジェクトのブランチ命名規約に合わせて変更してください。
+# 例: feature-123, issue-456, fix-789 など
+
+pre-push:
+  commands:
+    review:
+      run: |
+        BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        # ブランチ名から issue 番号を抽出（例: feature-123 → 123）
+        BRANCH_PATTERN='^feature-([0-9]+)$'
+        if [[ "$BRANCH" =~ $BRANCH_PATTERN ]]; then
+          ISSUE_NUMBER="${BASH_REMATCH[1]}"
+          ./dev-tools/review.sh re-review "$ISSUE_NUMBER"
+        fi
