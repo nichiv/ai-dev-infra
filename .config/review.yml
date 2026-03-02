@@ -1,0 +1,24 @@
+# AIレビュー設定
+
+# 有効化
+enabled: true
+
+# issueへのコメント
+comment: true
+
+# エージェント
+agents:
+  claude: true
+  gemini: true
+  codex: true
+
+# ブロック対象
+block:
+  critical: true
+  high: true
+  medium: true
+  low: true
+
+# タイムアウト（秒）
+timeout: 600
+timeout_with_codex: 900

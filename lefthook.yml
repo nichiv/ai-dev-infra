@@ -5,8 +5,10 @@
 #   2. lefthook install を実行
 #   3. .config/project.yml と .config/ai-models.yml を設定
 #
-# BRANCH_PATTERN はプロジェクトのブランチ命名規約に合わせて変更してください。
-# 例: feature-123, issue-456, fix-789 など
+# branch_prefix は .config/project.yml で配列として設定可能:
+#   branch_prefix:
+#     - navi_ota
+#     - navi_kaizen
 
 pre-push:
   commands:
@@ -14,9 +16,21 @@ pre-push:
       run: |
         export CONFIG_DIR="$(pwd)/.config"
         BRANCH=$(git rev-parse --abbrev-ref HEAD)
-        # ブランチ名から issue 番号を抽出（例: feature-123 → 123）
-        BRANCH_PATTERN='^feature-([0-9]+)$'
-        if [[ "$BRANCH" =~ $BRANCH_PATTERN ]]; then
-          ISSUE_NUMBER="${BASH_REMATCH[1]}"
-          ./dev-tools/review.sh re-review "$ISSUE_NUMBER"
+
+        # branch_prefix を config から取得（配列対応）
+        # 配列形式: .branch_prefix[] で展開、単一値の場合は .branch_prefix をそのまま使用
+        PREFIXES=$(yq -r '.repository.branch_prefix[]' "$CONFIG_DIR/project.yml" 2>/dev/null || yq -r '.repository.branch_prefix' "$CONFIG_DIR/project.yml" 2>/dev/null)
+
+        # 各プレフィックスでマッチングを試行
+        ISSUE_NUMBER=""
+        for prefix in $PREFIXES; do
+          # パターン: {prefix}-{数字} または {prefix}-{数字}-{数字}
+          if [[ "$BRANCH" =~ ^(${prefix}-[0-9]+)(-[0-9]+)?$ ]]; then
+            ISSUE_NUMBER="${BASH_REMATCH[1]}"
+            break
+          fi
+        done
+
+        if [ -n "$ISSUE_NUMBER" ]; then
+          ./dev-tools/review/review.sh review "$ISSUE_NUMBER"
         fi

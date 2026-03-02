@@ -18,6 +18,7 @@ if [ -z "${CONFIG_DIR:-}" ]; then
 fi
 
 PROJECT_CONFIG="${CONFIG_DIR}/project.yml"
+REVIEW_CONFIG="${CONFIG_DIR}/review.yml"
 AI_MODELS_CONFIG="${CONFIG_DIR}/ai-models.yml"
 
 _yaml_get() {
@@ -60,6 +61,15 @@ config_get() {
   local value
   value=$(_yaml_get "$PROJECT_CONFIG" "$1") || {
     echo "ERROR: Failed to read '$1' from $PROJECT_CONFIG" >&2
+    return 1
+  }
+  echo "$value"
+}
+
+review_get() {
+  local value
+  value=$(_yaml_get "$REVIEW_CONFIG" "$1") || {
+    echo "ERROR: Failed to read '$1' from $REVIEW_CONFIG" >&2
     return 1
   }
   echo "$value"
