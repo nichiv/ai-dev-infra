@@ -1,17 +1,21 @@
+# プロジェクト設定
+
+# Issue トラッカー（github または youtrack）
 issue_tracker: github
 
-review:
-  enabled: true
-  # Codex を含めてレビュー実行する場合は true（CLI の --with-codex でも有効化可能）
-  with_codex: false
+# YouTrack 設定（issue_tracker: youtrack の場合）
+# youtrack:
+#   base_url: https://your-instance.youtrack.cloud
 
+# リポジトリ情報
 repository:
   owner: your-org
   name: your-repo
   full_name: your-org/your-repo
   base_branch: main
-  # ブランチのプレフィックス（例: "feature" → feature-123 から issue 番号を抽出）
-  branch_prefix: feature
+  # ブランチプレフィックス（配列で複数指定可能）
+  branch_prefix:
+    - feature
 
 # GitHub Project 設定
 # task-系スキルで使用するGitHub Project/外部サービスの設定
