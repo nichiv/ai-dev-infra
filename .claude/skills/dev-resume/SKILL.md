@@ -70,14 +70,41 @@ git branch --show-current
 gh issue view {issue_number} --repo {REPO} --json number,title,body,url
 ```
 
-### Step 3: 計画ファイル確認
+### Step 3: 計画ファイル確認（必須）
+
+**作業開始前に必ず計画書を確認すること。このステップを省略してはならない。**
+
+**3-1: 計画ファイルの存在確認**
 
 ```bash
-ls ./tmp/plan-{issue_id}.md 2>/dev/null
+ls ./tmp/plan-*.md 2>/dev/null
 ```
 
-- 存在する場合 → 計画を読み込み
-- 存在しない場合 → Issueの作業計画セクションを参照
+**3-2: 計画ファイルの読み込み**
+
+計画ファイルが存在する場合は必ず内容を読み込む:
+
+```bash
+Read: ./tmp/plan-{issue_id}.md
+```
+
+読み込んだ内容から以下を確認:
+- 実装方針
+- タスク分解（完了/未完了の状態）
+- リスク・注意点
+- 参考資料
+
+**3-3: 計画ファイルが存在しない場合**
+
+計画ファイルがない場合は、GH Issueの作業計画セクションを参照:
+
+```bash
+gh issue view {issue_number} --repo {REPO} --json body --jq '.body'
+```
+
+`## 作業計画` セクションから方針とタスクを抽出。
+
+**注意:** 計画内容を把握せずに作業を開始してはならない。
 
 ### Step 4: GP Status更新: In Progress
 
@@ -147,7 +174,9 @@ mutation {
 
 ## 注意事項
 
-- 計画ファイル（./tmp/plan-{issue_id}.md）があれば読み込み
+- **計画ファイル（./tmp/plan-{issue_id}.md）の確認は必須**（Step 3を省略しない）
+- 計画ファイルがある場合は必ず内容を読み込んでから作業開始
+- 計画ファイルがない場合はGH Issueの作業計画セクションを確認
 - GH Issueの作業状況セクションからコンテキストを復元
 - Status は自動で In Progress に変更
 - 直接 gh CLI でIssue取得（外部サービスに依存しない）

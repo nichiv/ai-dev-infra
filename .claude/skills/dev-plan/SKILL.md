@@ -73,16 +73,80 @@ git branch --show-current
 gh issue view {issue_number} --repo {REPO} --json number,title,body,url
 ```
 
-※ 外部サービス情報が必要な場合は、GH Issue body内の外部サービスセクションを参照
+### Step 3: 外部サービス・関連Issue確認（必須）
 
-### Step 3: 既存コード調査
+**計画作成前に必ず以下を確認すること。このステップを省略してはならない。**
+
+**3-1: 外部サービスセクションの確認**
+
+Issue body内の `## 外部サービス` セクションを確認:
+
+```markdown
+## 外部サービス
+
+### {service_name}
+
+<!-- {service}-body-start
+{外部サービスのbody内容}
+{service}-body-end -->
+```
+
+- コメント `<!-- {service}-body-start ... {service}-body-end -->` 内の情報を読み取る
+- 追加要件、対象一覧、進捗状況などを把握
+
+必要に応じて外部サービスのMCPで最新情報を取得。
+
+**3-2: 関連セクションの確認**
+
+Issue body内の `## 関連` セクションを確認:
+
+```markdown
+## 関連
+
+### Issue
+- Epic: #1
+- External: {外部サービスURL}
+- GitHub: #2（説明）
+
+### 依存関係
+
+| 種類 | Issue | 状態 |
+|------|-------|------|
+| parent | #1 (Epic) | Open |
+| depends on | #2 | Open |
+| subtasks | #19, #20 | Open |
+```
+
+**3-3: 関連Issueの内容取得**
+
+依存関係にあるIssueの内容を確認:
+
+```bash
+# depends on のIssueは必ず確認（前提作業の状況把握）
+gh issue view {depends_on_issue} --repo {REPO} --json number,title,body,state
+
+# parent（Epic）があれば全体方針を確認
+gh issue view {parent_issue} --repo {REPO} --json number,title,body
+```
+
+**3-4: 確認結果の整理**
+
+計画作成前に以下を整理:
+- 外部サービスからの追加要件・背景情報
+- 依存Issueの状態（完了済み/進行中/未着手）
+- 依存Issueとの関係（何が前提条件か）
+- subtasksの構成（タスク分解が既にあるか）
+
+**注意:** 外部サービス・関連Issueの確認なしに計画を作成してはならない。
+
+### Step 4: 既存コード調査
 
 Issue内容に基づいて、関連コードを調査:
 - Glob/Grep で関連ファイルを検索
 - 既存の実装パターンを把握
 - 影響範囲を特定
 
-### Step 4: 計画ファイル作成
+### Step 5: 計画ファイル作成
 
 ローカルに計画ファイルを作成:
 
@@ -131,7 +195,7 @@ Write: ./tmp/plan-{issue_id}.md
 - {参考実装}
 ```
 
-### Step 5: ユーザー承認
+### Step 6: ユーザー承認
 
 計画内容を表示し、ユーザーの承認を求める:
 
@@ -149,17 +213,17 @@ Write: ./tmp/plan-{issue_id}.md
 - 修正指示: 計画を修正
 ```
 
-### Step 6: GH Issue更新
+### Step 7: GH Issue更新
 
 承認後、作業計画セクションを更新:
 
-**6-1: 現在のIssueボディ取得**
+**7-1: 現在のIssueボディ取得**
 
 ```bash
 gh issue view {issue_number} --repo {REPO} --json body --jq '.body'
 ```
 
-**6-2: 作業計画セクションを更新**
+**7-2: 作業計画セクションを更新**
 
 ```markdown
 ## 作業計画
@@ -177,7 +241,7 @@ gh issue view {issue_number} --repo {REPO} --json body --jq '.body'
 - [ ] タスク3
 ```
 
-**6-3: ボディを更新**
+**7-3: ボディを更新**
 
 ```bash
 Write: /tmp/issue-{issue_number}-body.md
@@ -185,7 +249,7 @@ Write: /tmp/issue-{issue_number}-body.md
 gh issue edit {issue_number} --repo {REPO} --body-file /tmp/issue-{issue_number}-body.md
 ```
 
-### Step 7: GP Status更新: In Progress
+### Step 8: GP Status更新: In Progress
 
 ```bash
 ITEM_ID=$(gh project item-list {PROJECT_NUMBER} --owner @me --limit 100 --format json | jq -r '.items[] | select(.content.number == {issue_number}) | .id')
@@ -201,7 +265,7 @@ mutation {
 }'
 ```
 
-### Step 8: 完了報告
+### Step 9: 完了報告
 
 ```
 ✅ 作業計画をIssueに記録しました
@@ -221,10 +285,14 @@ mutation {
 
 ## 注意事項
 
+- **外部サービス・関連Issueの確認は必須**（Step 3を省略しない）
 - 計画ファイルはローカルに保存（`./tmp/plan-{issue_id}.md`）
 - GH Issue の作業計画セクションにも反映
 - ユーザー承認なしにIssue更新しない
 - **Status を In Progress に変更**（作業開始を示す）
 - 直接 gh CLI でIssue取得（外部サービスに依存しない）
-- 外部サービス情報は外部サービスセクションに埋め込み済み
+- 外部サービス情報は外部サービスセクション内のコメントに埋め込み済み
+- 関連Issueのbodyはセクション構造を確認:
+  - `## 外部サービス` → `### {service}` → `<!-- {service}-body-start ... -->`
+  - `## 関連` → `### Issue`, `### 依存関係`
 - 調査結果は詳細に記録し、後で参照できるようにする
