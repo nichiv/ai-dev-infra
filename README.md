@@ -7,10 +7,13 @@ AI駆動開発のインフラツール群。Git hooks と複数AIエージェン
 | 機能 | 説明 | ドキュメント |
 |------|------|-------------|
 | 自動レビュー | `git push` 時に3エージェント並列でコードレビュー | [how-to-use/auto-review.md](how-to-use/auto-review.md) |
+| wt | Git worktree管理コマンド | [how-to-use/bin/wt.md](how-to-use/bin/wt.md) |
 
 ## ディレクトリ構成
 
 ```
+bin/
+  wt                   # Git worktree管理コマンド
 .config/
   project.yml          # リポジトリ情報（プロジェクトごとに編集）
   ai-models.yml        # AIモデル設定
