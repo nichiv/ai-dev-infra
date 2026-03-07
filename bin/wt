@@ -1,0 +1,484 @@
+#!/bin/bash
+
+# wt - Git Worktree管理コマンド
+# 使用方法:
+#   wt --create <repository_name> <issue_number> [base_branch]
+#   wt --cd <issue_number>
+#   wt --remove
+#   wt --list
+
+set -e
+
+# カラー定義
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+# 環境変数から設定を取得
+# WORKTREE_DIR: worktree格納ディレクトリ（必須）
+# PROJECT_DIR: プロジェクト検索ディレクトリ（必須）
+WT_BASE_DIR="${WORKTREE_DIR:-}"
+WT_PROJECT_DIR="${PROJECT_DIR:-}"
+
+# ヘルプメッセージ
+show_help() {
+    echo -e "${CYAN}=== wt - Git Worktree管理コマンド ===${NC}"
+    echo ""
+    echo -e "${GREEN}使用方法:${NC}"
+    echo "  wt --create <repository_name> <issue_number> [base_branch]"
+    echo "  wt --cd <issue_number>"
+    echo "  wt --remove"
+    echo "  wt --list"
+    echo ""
+    echo -e "${YELLOW}サブコマンド:${NC}"
+    echo "  --create, -c    Worktree作成"
+    echo "  --cd            Worktreeディレクトリへ移動（cdを出力）"
+    echo "  --remove, -r    マージ済みWorktreeを削除"
+    echo "  --list, -l      Worktree一覧表示"
+    echo "  --help, -h      ヘルプ表示"
+    echo ""
+    echo -e "${YELLOW}環境変数（必須）:${NC}"
+    echo "  WORKTREE_DIR    Worktree格納ディレクトリ"
+    echo "  PROJECT_DIR     プロジェクト検索ディレクトリ"
+    echo ""
+    echo -e "${YELLOW}設定例（.bashrc / .zshrc）:${NC}"
+    echo "  export WORKTREE_DIR=\"\$HOME/worktrees\""
+    echo "  export PROJECT_DIR=\"\$HOME/projects\""
+    echo ""
+    echo -e "${YELLOW}使用例:${NC}"
+    echo "  wt --create my-repo feature-123"
+    echo "  wt --create my-repo feature-123 develop"
+    echo "  cd \$(wt --cd feature-123)"
+    echo "  wt --remove"
+    echo ""
+}
+
+# エラー処理
+error_exit() {
+    echo -e "${RED}エラー: $1${NC}" >&2
+    exit 1
+}
+
+# 環境変数チェック
+check_env() {
+    if [ -z "$WT_BASE_DIR" ]; then
+        error_exit "WORKTREE_DIR が設定されていません\n設定例: export WORKTREE_DIR=\"\$HOME/worktrees\""
+    fi
+    if [ -z "$WT_PROJECT_DIR" ]; then
+        error_exit "PROJECT_DIR が設定されていません\n設定例: export PROJECT_DIR=\"\$HOME/projects\""
+    fi
+}
+
+# プロジェクトディレクトリを検出
+find_project_dir() {
+    local project_name="$1"
+
+    if [ -d "$WT_PROJECT_DIR/$project_name" ] && [ -d "$WT_PROJECT_DIR/$project_name/.git" ]; then
+        echo "$WT_PROJECT_DIR/$project_name"
+        return 0
+    fi
+
+    return 1
+}
+
+# デフォルトブランチを検出
+detect_default_branch() {
+    local project_dir="$1"
+    local default_branch=""
+
+    cd "$project_dir"
+
+    # 方法1: symbolic-refから取得
+    default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || true)
+
+    # 方法2: ローカルブランチから推測
+    if [ -z "$default_branch" ]; then
+        if git show-ref --verify --quiet refs/heads/master; then
+            default_branch="master"
+        elif git show-ref --verify --quiet refs/heads/main; then
+            default_branch="main"
+        fi
+    fi
+
+    # 方法3: リモートブランチから推測
+    if [ -z "$default_branch" ]; then
+        if git ls-remote --heads origin master 2>/dev/null | grep -q master; then
+            default_branch="master"
+        elif git ls-remote --heads origin main 2>/dev/null | grep -q main; then
+            default_branch="main"
+        fi
+    fi
+
+    echo "$default_branch"
+}
+
+# Worktree作成
+cmd_create() {
+    check_env
+
+    local repository_name="$1"
+    local issue_number="$2"
+    local base_branch="$3"
+
+    if [ -z "$repository_name" ] || [ -z "$issue_number" ]; then
+        error_exit "パラメータが不足しています\n使用方法: wt --create <repository_name> <issue_number> [base_branch]"
+    fi
+
+    # プロジェクトディレクトリを検出
+    local project_dir
+    project_dir=$(find_project_dir "$repository_name") || error_exit "プロジェクト '$repository_name' が見つかりません\n$WT_PROJECT_DIR/$repository_name を確認してください"
+
+    echo -e "${CYAN}プロジェクト: $project_dir${NC}"
+
+    cd "$project_dir"
+
+    # worktree保存ディレクトリの確認・作成
+    if [ ! -d "$WT_BASE_DIR" ]; then
+        echo "Worktreeディレクトリを作成: $WT_BASE_DIR"
+        mkdir -p "$WT_BASE_DIR"
+    fi
+
+    local worktree_dir="$WT_BASE_DIR/${repository_name}-${issue_number}"
+
+    # 既存worktreeの確認
+    if [ -d "$worktree_dir" ]; then
+        error_exit "Worktree '$worktree_dir' は既に存在します"
+    fi
+
+    # ベースブランチの決定
+    local effective_base_branch
+    if [ -n "$base_branch" ]; then
+        effective_base_branch="$base_branch"
+        # 指定されたブランチが存在するか確認
+        if ! git show-ref --verify --quiet "refs/heads/$base_branch" && ! git show-ref --verify --quiet "refs/remotes/origin/$base_branch"; then
+            error_exit "指定されたブランチ '$base_branch' が見つかりません"
+        fi
+    else
+        effective_base_branch=$(detect_default_branch "$project_dir")
+        if [ -z "$effective_base_branch" ]; then
+            error_exit "デフォルトブランチが検出できません"
+        fi
+    fi
+
+    echo -e "${CYAN}ベースブランチ: $effective_base_branch${NC}"
+
+    # 最新の状態を取得
+    echo "リモートから最新情報を取得中..."
+    git fetch origin
+
+    # ブランチの存在確認
+    if git show-ref --verify --quiet "refs/heads/$issue_number"; then
+        echo -e "${YELLOW}警告: ブランチ '$issue_number' は既に存在します${NC}"
+        echo "既存のブランチを使用してworktreeを作成しますか？ (y/N)"
+        read -r response
+        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+            echo "キャンセルしました"
+            exit 0
+        fi
+        git worktree add "$worktree_dir" "$issue_number"
+    else
+        git worktree add "$worktree_dir" -b "$issue_number" "origin/$effective_base_branch"
+    fi
+
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}Worktree作成完了${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo "パス: $worktree_dir"
+    echo "ブランチ: $issue_number"
+    echo ""
+    echo "移動コマンド:"
+    echo "  cd \$(wt --cd $issue_number)"
+    echo ""
+}
+
+# Worktreeへ移動（パスを出力）
+cmd_cd() {
+    check_env
+
+    local issue_number="$1"
+
+    if [ -z "$issue_number" ]; then
+        error_exit "issue番号を指定してください\n使用方法: cd \$(wt --cd <issue_number>)"
+    fi
+
+    # WORKTREE_DIR内で該当するworktreeを検索
+    local matches=()
+    local match_paths=()
+
+    if [ -d "$WT_BASE_DIR" ]; then
+        # パターン1: 完全一致
+        if [ -d "$WT_BASE_DIR/$issue_number" ]; then
+            matches+=("$issue_number")
+            match_paths+=("$WT_BASE_DIR/$issue_number")
+        fi
+        # パターン2: {repo}-{issue} 形式
+        for dir in "$WT_BASE_DIR"/*-"$issue_number"; do
+            if [ -d "$dir" ]; then
+                local dir_name
+                dir_name=$(basename "$dir")
+                matches+=("$dir_name")
+                match_paths+=("$dir")
+            fi
+        done
+        # パターン3: 部分一致（issue_numberを含む）
+        if [ "${#matches[@]}" -eq 0 ]; then
+            for dir in "$WT_BASE_DIR"/*"$issue_number"*; do
+                if [ -d "$dir" ]; then
+                    local dir_name
+                    dir_name=$(basename "$dir")
+                    matches+=("$dir_name")
+                    match_paths+=("$dir")
+                fi
+            done
+        fi
+    fi
+
+    local match_count=${#matches[@]}
+
+    if [ "$match_count" -eq 0 ]; then
+        echo "Worktree '$issue_number' が見つかりません" >&2
+        exit 1
+    elif [ "$match_count" -eq 1 ]; then
+        echo "${match_paths[0]}"
+    else
+        # 複数見つかった場合は対話形式で選択
+        echo "どちらのworktreeへ移動しますか？" >&2
+        for i in "${!matches[@]}"; do
+            echo "$((i+1)). ${matches[$i]}" >&2
+        done
+        echo -n "選択 [1-$match_count]: " >&2
+        read -r selection
+
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "$match_count" ]; then
+            echo "${match_paths[$((selection-1))]}"
+        else
+            echo "無効な選択です" >&2
+            exit 1
+        fi
+    fi
+}
+
+# マージ済みWorktreeを削除
+cmd_remove() {
+    check_env
+
+    echo -e "${CYAN}=== マージ済みWorktree削除 ===${NC}"
+    echo ""
+
+    if [ ! -d "$WT_BASE_DIR" ]; then
+        echo "Worktreeディレクトリが存在しません: $WT_BASE_DIR"
+        exit 0
+    fi
+
+    # ghコマンドの確認
+    if ! command -v gh &> /dev/null; then
+        error_exit "GitHub CLI (gh) がインストールされていません\nインストール: brew install gh"
+    fi
+
+    local deleted_count=0
+    local checked_count=0
+
+    # worktreeディレクトリを検索
+    for worktree_path in "$WT_BASE_DIR"/*; do
+        [ -d "$worktree_path" ] || continue
+
+        local dir_name
+        dir_name=$(basename "$worktree_path")
+
+        # ディレクトリ名からrepository_nameとbranch_nameを抽出
+        local repository_name=""
+        local branch_name=""
+
+        # PROJECT_DIR 配下の既存リポジトリ名とマッチングして分割
+        for repo_dir in "$WT_PROJECT_DIR"/*/; do
+            [ -d "$repo_dir/.git" ] || continue
+            local repo_name
+            repo_name=$(basename "$repo_dir")
+
+            if [[ "$dir_name" == "${repo_name}-"* ]]; then
+                repository_name="$repo_name"
+                branch_name="${dir_name#${repo_name}-}"
+                break
+            fi
+        done
+
+        # リポジトリ名が見つからない場合はスキップ
+        if [ -z "$repository_name" ] || [ -z "$branch_name" ]; then
+            echo -e "${YELLOW}スキップ（リポジトリ不明）: $dir_name${NC}"
+            continue
+        fi
+
+        # プロジェクトディレクトリを検出
+        local project_dir
+        project_dir=$(find_project_dir "$repository_name" 2>/dev/null) || continue
+
+        ((checked_count++))
+
+        echo -e "${BLUE}チェック中: $dir_name${NC}"
+        echo -e "  リポジトリ: $repository_name"
+        echo -e "  ブランチ: $branch_name"
+
+        cd "$project_dir"
+
+        # リモートでブランチの存在を確認
+        git fetch origin --prune 2>/dev/null || true
+
+        # GitHub APIでPRのマージ状況を確認
+        local is_merged=false
+
+        local repo_full_name
+        repo_full_name=$(git remote get-url origin | sed -E 's/.*[:/]([^/]+\/[^/.]+)(\.git)?$/\1/')
+
+        # PRを検索（マージ済みのもののみ）
+        local pr_info
+        pr_info=$(gh pr list --repo "$repo_full_name" --head "$branch_name" --state merged --json number,mergedAt 2>/dev/null || echo "[]")
+
+        if [ "$pr_info" != "[]" ] && [ -n "$pr_info" ]; then
+            is_merged=true
+            echo -e "  ${GREEN}→ PRがマージ済み${NC}"
+        else
+            if ! git show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
+                echo -e "  ${YELLOW}→ リモートブランチなし（作業中の可能性、スキップ）${NC}"
+            else
+                echo -e "  ${YELLOW}→ 未マージまたはPRなし（スキップ）${NC}"
+            fi
+        fi
+
+        if [ "$is_merged" = true ]; then
+            echo -e "  ${CYAN}削除中: $worktree_path${NC}"
+
+            # worktreeを削除
+            if git worktree remove "$worktree_path" --force 2>/dev/null; then
+                echo -e "  ${GREEN}Worktree削除完了${NC}"
+            else
+                rm -rf "$worktree_path" 2>/dev/null
+                git worktree prune 2>/dev/null || true
+                echo -e "  ${GREEN}Worktree削除完了（強制）${NC}"
+            fi
+
+            # ローカルブランチを削除
+            if git show-ref --verify --quiet "refs/heads/$branch_name"; then
+                if git branch -d "$branch_name" 2>/dev/null || git branch -D "$branch_name" 2>/dev/null; then
+                    echo -e "  ${GREEN}ローカルブランチ削除完了: $branch_name${NC}"
+                fi
+            fi
+
+            ((deleted_count++))
+        fi
+
+        echo ""
+    done
+
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}完了${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo "チェック数: $checked_count"
+    echo "削除数: $deleted_count"
+}
+
+# Worktree一覧表示
+cmd_list() {
+    check_env
+
+    echo -e "${CYAN}=== Worktree一覧 ===${NC}"
+    echo "ディレクトリ: $WT_BASE_DIR"
+    echo ""
+
+    if [ ! -d "$WT_BASE_DIR" ]; then
+        echo "Worktreeディレクトリが存在しません"
+        exit 0
+    fi
+
+    local count=0
+    for worktree_path in "$WT_BASE_DIR"/*; do
+        [ -d "$worktree_path" ] || continue
+
+        local dir_name
+        dir_name=$(basename "$worktree_path")
+
+        # ブランチ情報を取得
+        local branch_name="不明"
+        if [ -f "$worktree_path/.git" ]; then
+            branch_name=$(cd "$worktree_path" && git branch --show-current 2>/dev/null || echo "不明")
+        fi
+
+        echo -e "${GREEN}$dir_name${NC}"
+        echo "  パス: $worktree_path"
+        echo "  ブランチ: $branch_name"
+        echo ""
+
+        ((count++))
+    done
+
+    if [ "$count" -eq 0 ]; then
+        echo "Worktreeはありません"
+    else
+        echo "合計: $count 件"
+    fi
+}
+
+# シェル関数定義を出力
+cmd_init() {
+    local script_path
+    script_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+    cat << INIT_EOF
+# wt - Git Worktree管理コマンド（シェル関数）
+wt() {
+    case "\$1" in
+        cd)
+            local dir
+            dir=\$("$script_path" --cd "\$2")
+            if [[ -n "\$dir" && -d "\$dir" ]]; then
+                cd "\$dir"
+            fi
+            ;;
+        *)
+            "$script_path" "\$@"
+            ;;
+    esac
+}
+INIT_EOF
+}
+
+# メイン処理
+main() {
+    if [ $# -eq 0 ]; then
+        show_help
+        exit 0
+    fi
+
+    local command="$1"
+    shift
+
+    case "$command" in
+        --create|-c)
+            cmd_create "$@"
+            ;;
+        --cd)
+            cmd_cd "$@"
+            ;;
+        --remove|-r)
+            cmd_remove "$@"
+            ;;
+        --list|-l)
+            cmd_list "$@"
+            ;;
+        init)
+            cmd_init "$@"
+            ;;
+        --help|-h)
+            show_help
+            ;;
+        *)
+            echo -e "${RED}不明なコマンド: $command${NC}" >&2
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"
