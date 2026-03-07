@@ -16,3 +16,47 @@ repository:
   # ブランチプレフィックス（配列で複数指定可能）
   branch_prefix:
     - feature
+
+# GitHub Project 設定
+# task-系スキルで使用するGitHub Project/外部サービスの設定
+github_project:
+  # プロジェクト基本情報
+  project_id: "<GitHub Projects ID>"        # 例: PVT_kwHOxxxxxx
+  project_number: 1
+  repository: "your-org/your-repo"
+
+  # フィールドID
+  fields:
+    status:
+      id: "<Status Field ID>"               # 例: PVTSSF_xxxx
+      options:
+        todo: "<Todo Option ID>"
+        in_progress: "<In Progress Option ID>"
+        paused: "<Paused Option ID>"
+        done: "<Done Option ID>"
+
+    project:
+      id: "<Project Field ID>"
+      options:
+        project_a: "<Project A Option ID>"
+        project_b: "<Project B Option ID>"
+        personal: "<Personal Option ID>"
+
+    priority:
+      id: "<Priority Field ID>"
+      options:
+        p0_urgent: "<P0 Option ID>"
+        p1_high: "<P1 Option ID>"
+        p2_normal: "<P2 Option ID>"
+        p3_low: "<P3 Option ID>"
+
+    sprint:
+      id: "<Sprint Field ID>"
+
+# 外部Issue管理サービス設定（YouTrack等）
+external:
+  service: "youtrack"                       # サービス名
+  base_url: "<external_service_base_url>"   # 例: https://example.youtrack.cloud
+  projects:
+    - project_a
+    - project_b
