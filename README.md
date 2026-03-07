@@ -7,6 +7,7 @@ AI駆動開発のインフラツール群。Git hooks と複数AIエージェン
 | 機能 | 説明 | ドキュメント |
 |------|------|-------------|
 | 自動レビュー | `git push` 時に3エージェント並列でコードレビュー | [how-to-use/auto-review.md](how-to-use/auto-review.md) |
+| Permission自動許可 | Claude Code の安全なコマンドを自動許可 | [how-to-use/auto-allow.md](how-to-use/auto-allow.md) |
 
 ## ディレクトリ構成
 
@@ -18,6 +19,8 @@ dev-tools/
   review.sh            # 3エージェント並列レビュー
   config.sh            # YAML設定リーダー
   perspectives.md      # レビュー観点（カスタマイズ用）
+.claude/hooks/
+  auto-allow.sh        # Permission自動許可フック
 lefthook.yml           # Git hooks 設定
 ```
 
