@@ -198,19 +198,13 @@ gh issue create --repo {REPO} \
 - 作業計画を立てる
 ```
 
-### Step 6: プロジェクトに追加
+### Step 6: プロジェクトに追加 + アイテムID取得
 
 ```bash
-gh project item-add {PROJECT_NUMBER} --owner @me --url {issue_url}
+ITEM_ID=$(gh project item-add {PROJECT_NUMBER} --owner @me --url {issue_url} --format json | jq -r '.id')
 ```
 
 ### Step 7: フィールド設定
-
-**7-1: アイテムID取得**
-
-```bash
-ITEM_ID=$(gh project item-list {PROJECT_NUMBER} --owner @me --limit 100 --format json | jq -r '.items[] | select(.content.number == {issue_number}) | .id')
-```
 
 **7-2: Status = Todo**
 
