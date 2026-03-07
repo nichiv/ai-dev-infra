@@ -149,8 +149,7 @@ external:
 ### Step 4: プロジェクト追加・フィールド設定
 
 ```bash
-gh project item-add {PROJECT_NUMBER} --owner @me --url {issue_url}
-ITEM_ID=$(gh project item-list {PROJECT_NUMBER} --owner @me --limit 100 --format json | jq -r '.items[] | select(.content.number == {issue_number}) | .id')
+ITEM_ID=$(gh project item-add {PROJECT_NUMBER} --owner @me --url {issue_url} --format json | jq -r '.id')
 ```
 
 **Project フィールド（EXTERNAL_ISSUE_IDのプレフィックスから判定）:**
