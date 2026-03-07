@@ -2,8 +2,7 @@
 # review.sh - Claude CLI + Gemini CLI + Codex CLI による並列コードレビュー
 #
 # Usage:
-#   ./dev-tools/review/review.sh review <issue_number>              # レビュー実行
-#   ./dev-tools/review/review.sh review <issue_number> --with-codex # Codex も含めて実行
+#   ./dev-tools/review/review.sh review <issue_number>
 #
 # 動作:
 #   - tmp/review/combined-review-N.md が存在する場合: 前回指摘の修正確認も実施
@@ -31,8 +30,8 @@ source "${SCRIPT_DIR}/../config.sh"
 source "${SCRIPT_DIR}/../issue-tracker/loader.sh"
 
 # --- 引数チェック ---
-if [ $# -lt 2 ] || [ $# -gt 3 ]; then
-  echo "Usage: $0 review <issue_number> [--with-codex]"
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 review <issue_number>"
   exit 1
 fi
 
@@ -41,7 +40,7 @@ ISSUE_NUMBER="$2"
 
 if [ "$SUBCOMMAND" != "review" ]; then
   echo "Unknown subcommand: $SUBCOMMAND"
-  echo "Usage: $0 review <issue_number> [--with-codex]"
+  echo "Usage: $0 review <issue_number>"
   exit 1
 fi
 
@@ -57,11 +56,6 @@ unset _REVIEW_ENABLED
 WITH_CLAUDE=$(review_get '.agents.claude' 2>/dev/null) || WITH_CLAUDE="true"
 WITH_GEMINI=$(review_get '.agents.gemini' 2>/dev/null) || WITH_GEMINI="true"
 WITH_CODEX=$(review_get '.agents.codex' 2>/dev/null) || WITH_CODEX="false"
-
-# CLI フラグで上書き
-if [ "${3:-}" = "--with-codex" ]; then
-  WITH_CODEX=true
-fi
 
 # --- 設定ファイルから読み込み ---
 REPO=$(config_get '.repository.full_name')
@@ -208,26 +202,29 @@ OUTPUT_FORMAT='```
 
 # --- レビュープロンプト生成 ---
 generate_review_prompt() {
-  local prompt='あなたはシニアソフトウェアエンジニアのコードレビュアーです。
-以下の手順で差分を取得し、Issue の要件と照らし合わせてレビューしてください。
+  local prompt='あなたはシニアソフトウェアエンジニアとして、チームの品質を支える「一次フィルター」の役割を担うコードレビュアーです。
+以下の手順で差分を取得し、Issueに定義された「背景」「受入条件」「設計ヒント」と照らし合わせて、技術的かつ構造的な視点からレビューを実施してください。
+
+## あなたの役割
+1. **技術的門番:** バグ、脆弱性、不適切な実装（console.logの放置、anyの多用等）を徹底的に排除する。
+2. **整合性の担保:** 既存のコードベースやプロジェクトの設計パターンに沿っているかを確認する。
+3. **仕様との照合:** 実装が「受入条件（Acceptance Criteria）」を論理的に満たしているかを検証する。
+
+※ビジネス価値の最終判断や、仕様の行間読みについては人間が判断するため、あなたは事実と技術的根拠に基づく指摘に集中してください。
 
 ## 手順
-
 1. `git diff '"${BASE_BRANCH}"'...HEAD` を実行して、レビュー対象の差分を取得してください。
-2. 必要に応じて `read_file` 等を使用して各ファイルのコード品質を確認してください。
+2. 必要に応じて `read_file` 等を使用して、既存の共通部品や類似機能の実装を確認してください。
 
 ## レビュー観点
-
 '"${PERSPECTIVES}"'
 
 ## 出力フォーマット
-
 以下のフォーマットで出力してください。指摘がない場合は「指摘なし」と記載。
-
 '"${OUTPUT_FORMAT}"'
 
-事実ベースの指摘のみ。コードの動作を単に説明するだけの指摘は禁止。
-変更された行のみを対象とする（既存コードへの指摘は禁止）。
+※事実ベースの指摘のみ。動作説明は不要。
+※変更された行のみを対象とする（既存コードへの指摘は禁止）。
 '
 
   # 前回レビューがある場合、修正確認タスクを追加
