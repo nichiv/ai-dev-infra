@@ -8,6 +8,7 @@ AI駆動開発のインフラツール群。Git hooks と複数AIエージェン
 |------|------|-------------|
 | 自動レビュー | `git push` 時に3エージェント並列でコードレビュー | [how-to-use/auto-review.md](how-to-use/auto-review.md) |
 | wt | Git worktree管理コマンド | [how-to-use/bin/wt.md](how-to-use/bin/wt.md) |
+| tm | tmuxセッション管理コマンド | [how-to-use/bin/tm.md](how-to-use/bin/tm.md) |
 | Permission自動許可 | Claude Code の安全なコマンドを自動許可 | [how-to-use/auto-allow.md](how-to-use/auto-allow.md) |
 
 ## ディレクトリ構成
@@ -15,6 +16,7 @@ AI駆動開発のインフラツール群。Git hooks と複数AIエージェン
 ```
 bin/
   wt                   # Git worktree管理コマンド
+  tm                   # tmuxセッション管理コマンド
 .config/
   project.yml          # リポジトリ情報（プロジェクトごとに編集）
   ai-models.yml        # AIモデル設定

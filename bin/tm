@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  tm -c <name>    Create or attach to session
+  tm -r <name>    Remove session
+  tm -r --all     Remove all sessions
+  tm ls           List sessions
+USAGE
+}
+
+case "${1:-}" in
+  -c)
+    if [ -z "${2:-}" ]; then
+      echo "Error: session name required"
+      usage
+      exit 1
+    fi
+    tmux new -A -s "$2"
+    ;;
+  -r)
+    if [ "${2:-}" = "--all" ]; then
+      tmux kill-server 2>/dev/null && echo "All sessions removed" || echo "No sessions"
+    elif [ -n "${2:-}" ]; then
+      tmux kill-session -t "$2" && echo "Session '$2' removed"
+    else
+      echo "Error: session name or --all required"
+      usage
+      exit 1
+    fi
+    ;;
+  ls)
+    tmux ls 2>/dev/null || echo "No sessions"
+    ;;
+  *)
+    usage
+    ;;
+esac
