@@ -5,6 +5,7 @@ usage() {
   cat <<'USAGE'
 Usage:
   tm -c <name>    Create or attach to session
+  tm a            Attach to most recent session
   tm -r <name>    Remove session
   tm -r --all     Remove all sessions
   tm ls           List sessions
@@ -30,6 +31,9 @@ case "${1:-}" in
       usage
       exit 1
     fi
+    ;;
+  a)
+    tmux attach 2>/dev/null || { echo "No sessions"; exit 1; }
     ;;
   ls)
     tmux ls 2>/dev/null || echo "No sessions"
