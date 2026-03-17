@@ -73,6 +73,29 @@ git branch --show-current
 gh issue view {issue_number} --repo {REPO} --json number,title,body,url
 ```
 
+### Step 2.5: Status更新: In Progress（即時）
+
+**Issue特定後、調査開始前にステータスを In Progress に変更する。**
+
+```bash
+ITEM_ID=$(gh project item-list {PROJECT_NUMBER} --owner @me --limit 100 --format json | jq -r '.items[] | select(.content.number == {issue_number}) | .id')
+
+gh api graphql -f query='
+mutation {
+  updateProjectV2ItemFieldValue(input: {
+    projectId: "{PROJECT_ID}"
+    itemId: "'"$ITEM_ID"'"
+    fieldId: "{STATUS_FIELD_ID}"
+    value: { singleSelectOptionId: "{STATUS_IN_PROGRESS}" }
+  }) { projectV2Item { id } }
+}'
+```
+
+報告:
+```
+📌 Status: In Progress に変更しました
+```
+
 ### Step 3: 外部サービス・関連Issue確認（必須）
 
 **計画作成前に必ず以下を確認すること。このステップを省略してはならない。**
@@ -264,23 +287,7 @@ Write: /tmp/issue-{issue_number}-body.md
 gh issue edit {issue_number} --repo {REPO} --body-file /tmp/issue-{issue_number}-body.md
 ```
 
-### Step 8: GP Status更新: In Progress
-
-```bash
-ITEM_ID=$(gh project item-list {PROJECT_NUMBER} --owner @me --limit 100 --format json | jq -r '.items[] | select(.content.number == {issue_number}) | .id')
-
-gh api graphql -f query='
-mutation {
-  updateProjectV2ItemFieldValue(input: {
-    projectId: "{PROJECT_ID}"
-    itemId: "{ITEM_ID}"
-    fieldId: "{STATUS_FIELD_ID}"
-    value: { singleSelectOptionId: "{STATUS_IN_PROGRESS}" }
-  }) { projectV2Item { id } }
-}'
-```
-
-### Step 9: 完了報告
+### Step 8: 完了報告
 
 ```
 ✅ 作業計画をIssueに記録しました
@@ -304,7 +311,7 @@ mutation {
 - 計画ファイルはローカルに保存（`./tmp/plan-{issue_id}.md`）
 - GH Issue の作業計画セクションにも反映
 - ユーザー承認なしにIssue更新しない
-- **Status を In Progress に変更**（作業開始を示す）
+- **Status を In Progress に変更**（Issue特定後、調査開始時に即時変更）
 - 直接 gh CLI でIssue取得（外部サービスに依存しない）
 - 外部サービス情報は外部サービスセクション内のコメントに埋め込み済み
 - 関連Issueのbodyはセクション構造を確認:
