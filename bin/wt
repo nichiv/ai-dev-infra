@@ -274,11 +274,6 @@ cmd_remove() {
         exit 0
     fi
 
-    # ghコマンドの確認
-    if ! command -v gh &> /dev/null; then
-        error_exit "GitHub CLI (gh) がインストールされていません\nインストール: brew install gh"
-    fi
-
     local deleted_count=0
     local checked_count=0
 
@@ -324,31 +319,50 @@ cmd_remove() {
 
         cd "$project_dir"
 
-        # リモートでブランチの存在を確認
+        # リモートの最新情報を取得
         git fetch origin --prune 2>/dev/null || true
 
-        # GitHub APIでPRのマージ状況を確認
+        # デフォルトブランチを検出
+        local default_branch
+        default_branch=$(detect_default_branch "$project_dir")
+
+        if [ -z "$default_branch" ]; then
+            echo -e "  ${YELLOW}→ デフォルトブランチ不明（スキップ）${NC}"
+            echo ""
+            continue
+        fi
+
+        # マージ済み判定（ブランチの内容がデフォルトブランチに含まれているか）
         local is_merged=false
+        local merge_reason=""
 
-        local repo_full_name
-        repo_full_name=$(git remote get-url origin | sed -E 's/.*[:/]([^/]+\/[^/.]+)(\.git)?$/\1/')
+        # 方法1: worktree内のHEADがデフォルトブランチにマージ済みか確認
+        local worktree_head
+        worktree_head=$(git -C "$worktree_path" rev-parse HEAD 2>/dev/null || true)
 
-        # PRを検索（マージ済みのもののみ）
-        local pr_info
-        pr_info=$(gh pr list --repo "$repo_full_name" --head "$branch_name" --state merged --json number,mergedAt 2>/dev/null || echo "[]")
+        if [ -n "$worktree_head" ]; then
+            if git merge-base --is-ancestor "$worktree_head" "origin/$default_branch" 2>/dev/null; then
+                is_merged=true
+                merge_reason="コミットが$default_branch にマージ済み"
+            fi
+        fi
 
-        if [ "$pr_info" != "[]" ] && [ -n "$pr_info" ]; then
-            is_merged=true
-            echo -e "  ${GREEN}→ PRがマージ済み${NC}"
-        else
-            if ! git show-ref --verify --quiet "refs/remotes/origin/$branch_name"; then
-                echo -e "  ${YELLOW}→ リモートブランチなし（作業中の可能性、スキップ）${NC}"
-            else
-                echo -e "  ${YELLOW}→ 未マージまたはPRなし（スキップ）${NC}"
+        # 方法2: GitHub PRのマージ状況も確認（補助）
+        if [ "$is_merged" = false ] && command -v gh &> /dev/null; then
+            local repo_full_name
+            repo_full_name=$(git remote get-url origin | sed -E 's/.*[:/]([^/]+\/[^/.]+)(\.git)?$/\1/')
+
+            local pr_info
+            pr_info=$(gh pr list --repo "$repo_full_name" --head "$branch_name" --state merged --json number,mergedAt 2>/dev/null || echo "[]")
+
+            if [ "$pr_info" != "[]" ] && [ -n "$pr_info" ]; then
+                is_merged=true
+                merge_reason="PRがマージ済み"
             fi
         fi
 
         if [ "$is_merged" = true ]; then
+            echo -e "  ${GREEN}→ $merge_reason${NC}"
             echo -e "  ${CYAN}削除中: $worktree_path${NC}"
 
             # worktreeを削除
@@ -368,6 +382,8 @@ cmd_remove() {
             fi
 
             ((deleted_count++))
+        else
+            echo -e "  ${YELLOW}→ 未マージ（$default_branch に未反映）${NC}"
         fi
 
         echo ""
