@@ -27,6 +27,7 @@ dev-tools/
 .claude/hooks/
   auto-allow.sh        # Permission自動許可フック
 lefthook.yml           # Git hooks 設定
+tmux.conf              # tmux設定（自動保存・復元プラグイン込み、tmコマンド連携）
 ```
 
 ## 前提条件
