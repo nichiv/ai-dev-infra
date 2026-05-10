@@ -24,6 +24,8 @@ case "${1:-}" in
   -r)
     if [ "${2:-}" = "--all" ]; then
       tmux kill-server 2>/dev/null && echo "All sessions removed" || echo "No sessions"
+      rm -f ~/.tmux/resurrect/last
+      echo "Resurrect snapshot cleared"
     elif [ -n "${2:-}" ]; then
       tmux kill-session -t "$2" && echo "Session '$2' removed"
     else
