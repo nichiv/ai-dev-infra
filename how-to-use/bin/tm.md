@@ -105,7 +105,9 @@ tm -r main
 tm -r --all
 ```
 
-`tmux.conf` を導入している場合は、tmuxサーバ停止に加えて `~/.tmux/resurrect/last` も削除する。これがないと、次回 `tm -c` 実行時にcontinuumの自動復元で削除したはずのセッションが蘇る。タイムスタンプ付きの過去スナップショットは `~/.tmux/resurrect/` に残るため、必要なら手動で復元可能。
+`tmux.conf` を導入している場合は、tmuxサーバ停止に加えてresurrectの `last` スナップショットも削除する。これがないと、次回 `tm -c` 実行時にcontinuumの自動復元で削除したはずのセッションが蘇る。タイムスタンプ付きの過去スナップショットは残るため、必要なら手動で復元可能。
+
+保存先はtmux-resurrect本体と同じロジックで解決する（`~/.tmux/resurrect/` が既に存在すればそこ、なければ `${XDG_DATA_HOME:-~/.local/share}/tmux/resurrect/`）。macOSなど新規環境では後者のXDGパスが使われる。
 
 ## 前提条件
 

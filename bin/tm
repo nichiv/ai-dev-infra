@@ -12,6 +12,16 @@ Usage:
 USAGE
 }
 
+# tmux-resurrect の保存先を本体(helpers.sh)と同じロジックで解決する。
+# ~/.tmux/resurrect が既にあればそれを、なければ XDG (~/.local/share/tmux/resurrect) を使う。
+resurrect_dir() {
+  if [ -d "$HOME/.tmux/resurrect" ]; then
+    echo "$HOME/.tmux/resurrect"
+  else
+    echo "${XDG_DATA_HOME:-$HOME/.local/share}/tmux/resurrect"
+  fi
+}
+
 case "${1:-}" in
   -c)
     if [ -z "${2:-}" ]; then
@@ -24,7 +34,7 @@ case "${1:-}" in
   -r)
     if [ "${2:-}" = "--all" ]; then
       tmux kill-server 2>/dev/null && echo "All sessions removed" || echo "No sessions"
-      rm -f ~/.tmux/resurrect/last
+      rm -f "$(resurrect_dir)/last"
       echo "Resurrect snapshot cleared"
     elif [ -n "${2:-}" ]; then
       tmux kill-session -t "$2" && echo "Session '$2' removed"
