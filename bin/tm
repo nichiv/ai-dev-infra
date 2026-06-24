@@ -45,7 +45,19 @@ case "${1:-}" in
     fi
     ;;
   a)
-    tmux attach 2>/dev/null || { echo "No sessions"; exit 1; }
+    if tmux attach 2>/dev/null; then
+      :
+    elif [ -f "$(resurrect_dir)/last" ]; then
+      echo "Restoring from resurrect snapshot..."
+      tmux new-session -d -s _restore_tmp
+      tmux run-shell ~/.tmux/plugins/tmux-resurrect/scripts/restore.sh
+      sleep 1
+      tmux kill-session -t _restore_tmp 2>/dev/null
+      tmux attach
+    else
+      echo "No sessions and no resurrect snapshot"
+      exit 1
+    fi
     ;;
   ls)
     tmux ls 2>/dev/null || echo "No sessions"
