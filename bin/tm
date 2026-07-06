@@ -6,6 +6,7 @@ usage() {
 Usage:
   tm -c <name>    Create or attach to session
   tm a            Attach to most recent session
+  tm s            Save session snapshot (resurrect)
   tm -r <name>    Remove session
   tm -r --all     Remove all sessions
   tm ls           List sessions
@@ -43,6 +44,10 @@ case "${1:-}" in
       usage
       exit 1
     fi
+    ;;
+  s)
+    ~/.tmux/plugins/tmux-resurrect/scripts/save.sh
+    echo "Session snapshot saved to $(resurrect_dir)"
     ;;
   a)
     if tmux attach 2>/dev/null; then
