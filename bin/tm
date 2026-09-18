@@ -10,6 +10,7 @@ Usage:
   tm -r <name>    Remove session
   tm -r --all     Remove all sessions
   tm ls           List sessions
+  tm ps           Capture full pane scrollback
 USAGE
 }
 
@@ -66,6 +67,9 @@ case "${1:-}" in
     ;;
   ls)
     tmux ls 2>/dev/null || echo "No sessions"
+    ;;
+  ps)
+    tmux display-message -p 'tmux capture-pane -p -S - -E - -t #S:#I.#P'
     ;;
   *)
     usage
